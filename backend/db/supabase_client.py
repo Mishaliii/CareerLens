@@ -1,0 +1,20 @@
+import logging
+from supabase import create_client, Client
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    logger.warning("SUPABASE_URL or SUPABASE_KEY not found in environment variables")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+def get_supabase() -> Client:
+    return supabase
