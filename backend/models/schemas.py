@@ -355,3 +355,47 @@ class CoPilotRequest(BaseModel):
 class CoPilotResponse(BaseModel):
     answer: str
     sources: List[str]
+
+
+# Candidate Profile Schemas
+class CandidateProfileMetadata(BaseModel):
+    profile_schema_version: str = "1.0.0"
+    parser_version: str = "1.0.0"
+    parser_confidence: Optional[float] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    word_count: int = 0
+    page_count: Optional[int] = None
+    language: Optional[str] = None
+
+
+class CandidateProfilePersonal(BaseModel):
+    name: str = ""
+    email: str = ""
+    phone: str = ""
+    location: str = ""
+    linkedin: str = ""
+    github: str = ""
+    portfolio: str = ""
+
+
+class CandidateProfileStatistics(BaseModel):
+    word_count: int = 0
+    bullet_count: int = 0
+    experience_count: int = 0
+    project_count: int = 0
+    certification_count: int = 0
+    skills_count: int = 0
+
+
+class CandidateProfile(BaseModel):
+    metadata: CandidateProfileMetadata = Field(default_factory=CandidateProfileMetadata)
+    personal: CandidateProfilePersonal = Field(default_factory=CandidateProfilePersonal)
+    summary: str = ""
+    education: str = ""
+    experience: str = ""
+    projects: str = ""
+    skills: str = ""
+    certifications: str = ""
+    achievements: str = ""
+    languages_spoken: str = ""
+    resume_statistics: CandidateProfileStatistics = Field(default_factory=CandidateProfileStatistics)

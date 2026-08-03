@@ -149,6 +149,68 @@ Build in this exact sequence, test each before moving on:
 12. Dashboard (reads from all modules, no hardcoded values)
 13. Email Digest + Deployment
 
+## Sprint Execution Strategy
+
+Some modules are intentionally divided into multiple
+implementation sprints.
+
+Each sprint must be completed, tested, reviewed, and
+committed before beginning the next sprint.
+
+Never implement multiple sprints together unless
+explicitly instructed.
+
+Current sprint breakdown:
+
+Module 1 — CV Intelligence Engine
+
+Sprint 1.1
+CV Parser Foundation
+
+Sprint 1.2.1
+Canonical Candidate Profile
+
+Sprint 1.2.2
+Document Analyzer
+
+Sprint 1.2.3
+Gemini Structured Extraction
+
+Sprint 1.2.4
+Schema Validation
+
+Sprint 1.2.5
+Normalization Engine
+
+Sprint 1.3
+Semantic Embeddings (BGE-M3)
+
+Sprint 1.4
+Skill Ontology
+
+Sprint 1.2.6
+Pipeline Integration
+
+Continue to later modules only after Module 1
+has been fully completed.
+
+## Sprint Rules
+
+Each sprint must satisfy ALL of the following before
+the next sprint begins:
+
+✓ Code implemented
+✓ Unit tests passing
+✓ Logging added
+✓ Error handling implemented
+✓ Manual review completed
+✓ Git committed
+✓ Git pushed
+✓ Sprint approved
+
+Do not begin the next sprint until the previous sprint
+is fully approved.
+
 ## Gemini Prompt Rules
 - Always end prompts with: "Return JSON only. No markdown.
   No explanation. No code blocks."
@@ -263,3 +325,74 @@ backend/services/company_intel.py
 backend/services/candidate_profile.py
 backend/data/certifications.json
 backend/data/company_intel.json
+## Engineering Standards
+
+API VERSIONING
+- All backend endpoints use /api/v1/.
+- Never expose unversioned production APIs.
+
+API RESPONSE FORMAT
+Every endpoint returns structured JSON.
+
+Success:
+{
+  "success": true,
+  "message": "...",
+  "data": { ... }
+}
+
+Validation Error:
+{
+  "success": false,
+  "message": "...",
+  "errors": [...]
+}
+
+Internal Error:
+{
+  "success": false,
+  "message": "...",
+  "error_code": "..."
+}
+
+Never expose stack traces to users.
+
+SERVICE DEPENDENCIES
+Routers may call Services.
+Services may call Database and Utilities.
+Services must never call Routers.
+Database layer never imports Services.
+Avoid circular imports.
+
+DATABASE
+Database schema and Pydantic models must remain synchronized.
+Never manually edit production schema.
+Schema changes require migrations.
+
+UTILITIES
+Reusable code belongs in backend/utils/.
+Avoid duplicating helper logic across services.
+
+PERFORMANCE
+Prioritize correctness over optimization.
+Only optimize after measuring bottlenecks.
+Do not introduce caching or concurrency without need.
+
+AI VALIDATION
+Never trust LLM output directly.
+Always:
+- Validate JSON
+- Validate required fields
+- Validate data types
+- Log malformed responses
+- Use fallback behavior on failure
+
+DOCUMENTATION
+Every service should document:
+Purpose
+Inputs
+Outputs
+Dependencies
+Side effects
+
+Comments explain WHY, not WHAT.
