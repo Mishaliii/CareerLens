@@ -180,23 +180,88 @@ TOTAL MAX = 100
 
 Called "CareerLens Resume Readiness Score" not "ATS Score". Uses spaCy for noun phrase extraction.
 
+## AI Agents
+
+CareerLens AI is designed around specialized AI experiences that
+share common backend services, candidate data, and controlled tools.
+
+### 1. Career Copilot
+The central career assistant. Helps users understand their career
+position, coordinate tasks across CareerLens, and decide what to
+focus on next.
+
+### 2. Job Search Agent
+Supports job discovery, candidate-job matching, skill-gap analysis,
+eligibility assessment, and application tracking.
+
+### 3. Resume Intelligence Agent
+Analyzes resume content, identifies weaknesses, suggests
+evidence-based improvements, and supports user-approved revisions.
+
+### 4. Interview Preparation Agent
+Conducts adaptive mock interviews, evaluates responses against
+defined rubrics, identifies weaknesses, and recommends targeted
+practice.
+
+### 5. Career Roadmap Agent
+Creates and adapts learning plans based on career goals, skill gaps,
+available time, and verified progress.
+
+### Architecture
+
+The agents share backend services and do not independently implement
+duplicate business logic. Each agent has a defined scope, controlled
+tools, validated outputs, and access limited by the user's
+permissions.
+
+Agent actions that modify user data must follow explicit
+authorization and confirmation rules.
+
+Implementation status: Planned. Individual agents will be marked
+implemented only after their workflows, integrations, and tests
+are complete.
+
+## Agent Architecture Rules
+
+- Agents use shared backend services rather than duplicating business logic.
+- Each agent has a clearly defined scope and a limited set of tools.
+- Tool inputs and outputs are validated using defined schemas.
+- Agents must not fabricate jobs, candidate qualifications, or achievements.
+- Semantic similarity must not be presented as the probability of being hired.
+- Agents must distinguish verified information from estimates and uncertainty.
+- User-owned data must be protected by authentication, authorization,
+  and database access policies.
+- Agents must not modify resumes, profiles, roadmaps, or application
+  records without following the applicable approval rules.
+- LLM responses must be validated before they are used by the application.
+- Agent failures must produce clear errors or controlled fallbacks.
+- Sensitive resume content must not be written to application logs.
+- Agent workflows must be tested for correctness, permissions,
+  failure handling, and unintended actions.
+
 ## Module Build Order
 
 Build in this exact sequence, test each before moving on:
-1. Project setup ✓
-2. CV Parser
-3. Job Collection Engine
-4. Semantic Matching Engine
-5. Resume Optimizer
-6. Resume Builder
-7. ATS Checker
-8. Career Roadmap
-9. Interview Coach
-10. Career Co-pilot
-11. Job Tracker + Easy Apply + Profile
-12. Dashboard
-13. Email Digest + Deployment
-
+1. Project setup.
+2. CV Parser.
+3. Canonical Candidate Profile.
+4. Document Analyzer.
+5. Structured extraction and schema validation.
+6. Normalization Engine and Skill Ontology.
+7. Semantic Embeddings.
+8. CV pipeline integration and upload API.
+9. Connect Resume Center to the backend.
+10. Job Collection Engine.
+11. Semantic Matching Engine.
+12. Connect Find Jobs and matching explanations.
+13. Resume Optimizer and Resume Builder.
+14. Resume Readiness.
+15. Career Roadmap and Roadmap Agent.
+16. Interview Coach and Interview Preparation Agent.
+17. Job Tracker, Profile, and related integrations.
+18. Career Copilot and its controlled tools.
+19. Job Search Agent enhancements and cross-module   coordination.
+20. Dashboard, notifications, security hardening, testing, and deployment.
 ## License
 
 MIT

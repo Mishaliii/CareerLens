@@ -179,14 +179,47 @@ class RoadmapResponse(BaseModel):
         from_attributes = True
 
 
+class GradeScale(str, Enum):
+    CGPA = "cgpa"
+    GPA = "gpa"
+    PERCENTAGE = "percentage"
+    UNKNOWN = "unknown"
+
+
+class AcademicGrade(BaseModel):
+    value: float
+    raw_value: Optional[str] = None
+    scale: GradeScale = GradeScale.UNKNOWN
+    max_scale: Optional[float] = None
+
+
+class DatePrecision(str, Enum):
+    YEAR = "year"
+    MONTH = "month"
+    DAY = "day"
+
+
+class NormalizedDate(BaseModel):
+    raw: str
+    formatted: Optional[str] = None
+    year: Optional[int] = None
+    month: Optional[int] = None
+    day: Optional[int] = None
+    precision: Optional[DatePrecision] = None
+    is_current: bool = False
+
+
 # Profile Schemas
 class EducationItem(BaseModel):
     institution: str
     degree: str
     field: str
-    start_year: int
+    start_year: Optional[int] = None
     end_year: Optional[int] = None
     gpa: Optional[float] = None
+    raw_degree: Optional[str] = None
+    normalized_degree: Optional[str] = None
+    grade: Optional[AcademicGrade] = None
 
 
 class ExperienceItem(BaseModel):
@@ -195,6 +228,9 @@ class ExperienceItem(BaseModel):
     start_date: str
     end_date: Optional[str] = None
     description: Optional[str] = None
+    start_date_normalized: Optional[NormalizedDate] = None
+    end_date_normalized: Optional[NormalizedDate] = None
+    is_current: bool = False
 
 
 class CertificationItem(BaseModel):
@@ -202,6 +238,30 @@ class CertificationItem(BaseModel):
     issuer: str
     date_obtained: str
     expiry_date: Optional[str] = None
+
+
+class ProjectItem(BaseModel):
+    name: str
+    description: Optional[str] = None
+    technologies: List[str] = Field(default_factory=list)
+    link: Optional[str] = None
+
+
+class StructuredCV(BaseModel):
+    full_name: str = ""
+    email: str = ""
+    phone: str = ""
+    location: str = ""
+    linkedin_url: str = ""
+    github_url: str = ""
+    portfolio_url: str = ""
+    summary: str = ""
+    education: List[EducationItem] = Field(default_factory=list)
+    experience: List[ExperienceItem] = Field(default_factory=list)
+    projects: List[ProjectItem] = Field(default_factory=list)
+    skills: List[str] = Field(default_factory=list)
+    certifications: List[CertificationItem] = Field(default_factory=list)
+    extraction_source: str = "fallback"
 
 
 class ProfileCreate(BaseModel):
@@ -399,3 +459,5 @@ class CandidateProfile(BaseModel):
     achievements: str = ""
     languages_spoken: str = ""
     resume_statistics: CandidateProfileStatistics = Field(default_factory=CandidateProfileStatistics)
+    structured_data: Optional[StructuredCV] = None
+
