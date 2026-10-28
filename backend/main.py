@@ -36,5 +36,7 @@ async def root():
 async def health_check():
     return {"status": "healthy"}
 
-# Routers will be included here in future steps
-# from routers import cv, jobs, match, optimizer, builder, ats, roadmap, interview, copilot, tracker, apply, profile
+# Routers
+from backend.routers.cv import router as cv_router
+
+app.include_router(cv_router)

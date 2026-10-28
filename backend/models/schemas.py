@@ -461,3 +461,23 @@ class CandidateProfile(BaseModel):
     resume_statistics: CandidateProfileStatistics = Field(default_factory=CandidateProfileStatistics)
     structured_data: Optional[StructuredCV] = None
 
+
+# CV Processing Pipeline Schemas
+class DocumentAnalysisResponse(BaseModel):
+    page_count: int
+    language: Optional[str] = None
+    parser_confidence: Optional[float] = None
+    total_characters: int
+    total_words: int
+    pages_with_text: int
+    pages_sparse_or_empty: int
+    character_density_per_page: float
+
+
+class CVProcessResponse(BaseModel):
+    success: bool = True
+    message: str = "CV processed successfully"
+    profile: CandidateProfile
+    document_analysis: DocumentAnalysisResponse
+    processing_time_ms: float
+
