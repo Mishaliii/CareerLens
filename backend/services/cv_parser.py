@@ -1,7 +1,7 @@
 import logging
 import re
 import fitz
-from typing import Dict
+from typing import Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +101,73 @@ class CVParser:
             raise ValueError("Invalid PDF file format") from e
         except Exception as e:
             logger.exception("Unexpected error parsing PDF")
+            raise
+
+    def parse_pdf_pages(self, file_bytes: bytes) -> List[Dict[str, Any]]:
+        """
+        Extract text page by page from PDF using PyMuPDF, preserving 1-based page numbers.
+
+        Args:
+            file_bytes: Raw PDF file bytes
+
+        Returns:
+            List of dicts: [{"page_number": int, "text": str, "char_count": int}, ...]
+
+        Raises:
+            ValueError: If PDF is empty, invalid, corrupted, or contains no readable text.
+        """
+        if not file_bytes:
+            logger.error("Empty PDF bytes provided to parse_pdf_pages")
+            raise ValueError("PDF file is empty")
+
+        if len(file_bytes) < 4:
+            logger.error("Invalid PDF bytes: too short (%d bytes)", len(file_bytes))
+            raise ValueError("Invalid PDF: file too short to be valid")
+
+        try:
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+
+            if doc.page_count == 0:
+                logger.error("PDF has no pages")
+                doc.close()
+                raise ValueError("PDF has no pages")
+
+            pages_data: List[Dict[str, Any]] = []
+            total_chars = 0
+
+            for page_num in range(doc.page_count):
+                page = doc[page_num]
+                raw_page_text = page.get_text()
+                cleaned_page_text = self._clean_text(raw_page_text)
+                pages_data.append({
+                    "page_number": page_num + 1,
+                    "text": cleaned_page_text,
+                    "char_count": len(cleaned_page_text),
+                })
+                total_chars += len(cleaned_page_text.strip())
+
+            page_count = doc.page_count
+            doc.close()
+
+            logger.info(
+                "PDF pages parsed successfully: %d pages, %d readable characters extracted",
+                page_count,
+                total_chars,
+            )
+
+            if total_chars == 0:
+                logger.warning("PDF parsed page-by-page but no readable text found")
+                raise ValueError("PDF contains no readable text")
+
+            return pages_data
+
+        except fitz.FileDataError as e:
+            logger.error("Invalid PDF data: %s", str(e))
+            raise ValueError("Invalid PDF file format") from e
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.exception("Unexpected error parsing PDF page-by-page")
             raise
     
     def _clean_text(self, text: str) -> str:

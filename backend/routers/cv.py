@@ -3,17 +3,23 @@ import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from sqlalchemy.orm import Session
 
+from backend.db.database import get_db
+from backend.db.models import User
 from backend.models.schemas import (
     CandidateProfile,
     CVProcessResponse,
     DocumentAnalysisResponse,
 )
+from backend.services.auth_service import get_current_user
 from backend.services.cv_pipeline import CVPipelineService
+from backend.services.rate_limiter import rate_limit_cv_process
+from backend.services.security_config import get_max_upload_size_bytes
 
 logger = logging.getLogger(__name__)
 
-# Enforce 10 MiB upload limit (10 * 1024 * 1024 bytes)
+# Enforce default 10 MiB upload limit (10 * 1024 * 1024 bytes)
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 READ_CHUNK_SIZE_BYTES = 64 * 1024  # 64 KiB chunks
 
@@ -31,16 +37,23 @@ def get_cv_pipeline() -> CVPipelineService:
     status_code=status.HTTP_200_OK,
     summary="Process CV PDF",
     description="Extracts, analyzes, normalizes, and structures candidate CV data from an uploaded PDF.",
+    dependencies=[Depends(rate_limit_cv_process)],
 )
 async def process_cv(
     request: Request,
     file: UploadFile = File(..., description="PDF document of the candidate CV (max 10 MiB)."),
     pipeline: CVPipelineService = Depends(get_cv_pipeline),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> CVProcessResponse:
     """
     Handle CV upload, validate PDF structure and size, execute pipeline, and return CandidateProfile.
     """
     start_time = time.perf_counter()
+    configured_limit = get_max_upload_size_bytes()
+    max_size_bytes = MAX_FILE_SIZE_BYTES if MAX_FILE_SIZE_BYTES != 10 * 1024 * 1024 else configured_limit
+    limit_mib = max(1, max_size_bytes // (1024 * 1024))
+    limit_detail = f"File size exceeds maximum allowed limit of {limit_mib} MiB"
 
     try:
         # 1. Early Content-Length check if provided by client headers
@@ -48,11 +61,11 @@ async def process_cv(
         if content_length_header:
             try:
                 content_length = int(content_length_header)
-                if content_length > MAX_FILE_SIZE_BYTES:
+                if content_length > max_size_bytes:
                     logger.warning("Upload rejected early: Content-Length %d exceeds limit", content_length)
                     raise HTTPException(
                         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                        detail="File size exceeds maximum allowed limit of 10 MiB",
+                        detail=limit_detail,
                     )
             except ValueError:
                 pass
@@ -64,11 +77,11 @@ async def process_cv(
             if not chunk:
                 break
             file_bytes.extend(chunk)
-            if len(file_bytes) > MAX_FILE_SIZE_BYTES:
-                logger.warning("Upload rejected: stream exceeded 10 MiB limit (%d bytes read)", len(file_bytes))
+            if len(file_bytes) > max_size_bytes:
+                logger.warning("Upload rejected: stream exceeded limit (%d bytes read)", len(file_bytes))
                 raise HTTPException(
                     status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    detail="File size exceeds maximum allowed limit of 10 MiB",
+                    detail=limit_detail,
                 )
 
         # 3. Empty file check
@@ -97,9 +110,14 @@ async def process_cv(
                 detail="Uploaded file must be a valid PDF document",
             )
 
-        # 6. Execute in-memory CV pipeline
+        # 6. Execute CV pipeline with authenticated user context
         try:
-            result = pipeline.process_cv(bytes(file_bytes))
+            result = pipeline.process_cv(
+                bytes(file_bytes),
+                user_id=current_user.id,
+                filename=file.filename or f"resume_{current_user.id}.pdf",
+                db=db,
+            )
         except ValueError as ve:
             err_msg = str(ve).lower()
             logger.warning("Pipeline rejected unprocessable PDF: %s", type(ve).__name__)
@@ -140,6 +158,9 @@ async def process_cv(
                 character_density_per_page=result.document_analysis.character_density_per_page,
             ),
             processing_time_ms=elapsed_ms,
+            resume_id=result.resume_id,
+            indexed=result.indexed,
+            chunk_count=result.chunk_count,
         )
 
     finally:

@@ -21,6 +21,9 @@ class TestCVPipelineIntegration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.client = TestClient(app)
+        # Force MockEmbedder during pipeline integration tests to prevent downloading models
+        cls._prev_mock_env = os.environ.get("CAREERLENS_USE_MOCK_EMBEDDER")
+        os.environ["CAREERLENS_USE_MOCK_EMBEDDER"] = "1"
         # Block any live network calls to Google Generative AI across all tests
         cls._genai_blocker = patch.object(
             genai.GenerativeModel,
@@ -32,9 +35,36 @@ class TestCVPipelineIntegration(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls._genai_blocker.stop()
+        if cls._prev_mock_env is not None:
+            os.environ["CAREERLENS_USE_MOCK_EMBEDDER"] = cls._prev_mock_env
+        else:
+            os.environ.pop("CAREERLENS_USE_MOCK_EMBEDDER", None)
 
     def setUp(self):
         """Set up test-level deterministic extraction mock and service isolation."""
+        # Provide an authenticated user for tests exercising protected routes
+        from backend.db.database import Base, SessionLocal, engine
+        from backend.db.models import User
+        from backend.services.auth_service import get_current_user
+
+        Base.metadata.create_all(bind=engine)
+        with SessionLocal() as db_session:
+            u = db_session.query(User).filter(User.id == "test_user_cv_pipeline").first()
+            if not u:
+                self.mock_user = User(
+                    id="test_user_cv_pipeline",
+                    email="cv_pipeline_user@example.com",
+                    hashed_password="hashed_pw",
+                    full_name="CV Test User",
+                    is_active=True,
+                )
+                db_session.add(self.mock_user)
+                db_session.commit()
+            else:
+                self.mock_user = u
+
+        app.dependency_overrides[get_current_user] = lambda: self.mock_user
+
         # Ensure GeminiService is always configured with a mock model during tests
         def _mock_gemini_init(svc, api_key=None):
             svc.api_key = "test_deterministic_key"
@@ -63,6 +93,9 @@ class TestCVPipelineIntegration(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test-level patches."""
+        from backend.services.auth_service import get_current_user
+        app.dependency_overrides.pop(get_current_user, None)
+
         self._gemini_patcher.stop()
         self._init_patcher.stop()
 

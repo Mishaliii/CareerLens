@@ -267,6 +267,43 @@ class TestCVParser(unittest.TestCase):
         self.assertEqual(sections["skills"], "")
         self.assertEqual(sections["certifications"], "")
 
+    def test_parse_pdf_pages_multipage(self):
+        """Test extracting text page by page with 1-based page numbers."""
+        doc = fitz.open()
+        p1 = doc.new_page()
+        p1.insert_text((50, 50), "Page One Content: Professional Summary")
+        p2 = doc.new_page()
+        p2.insert_text((50, 50), "Page Two Content: Technical Experience")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        pages = self.parser.parse_pdf_pages(pdf_bytes)
+        self.assertEqual(len(pages), 2)
+        self.assertEqual(pages[0]["page_number"], 1)
+        self.assertIn("Page One Content", pages[0]["text"])
+        self.assertEqual(pages[1]["page_number"], 2)
+        self.assertIn("Page Two Content", pages[1]["text"])
+
+    def test_parse_pdf_pages_empty_and_corrupted(self):
+        """Test parse_pdf_pages on empty and malformed byte inputs."""
+        with self.assertRaises(ValueError):
+            self.parser.parse_pdf_pages(b"")
+        with self.assertRaises(ValueError):
+            self.parser.parse_pdf_pages(b"short")
+        with self.assertRaises(ValueError):
+            self.parser.parse_pdf_pages(b"%PDF-corrupted-bytes-data")
+
+    def test_parse_pdf_pages_no_readable_text(self):
+        """Test parse_pdf_pages on empty page PDF without readable text."""
+        doc = fitz.open()
+        doc.new_page()  # Blank page
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        with self.assertRaises(ValueError) as ctx:
+            self.parser.parse_pdf_pages(pdf_bytes)
+        self.assertIn("no readable text", str(ctx.exception).lower())
+
 
 if __name__ == "__main__":
     unittest.main()
