@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
@@ -480,4 +480,193 @@ class CVProcessResponse(BaseModel):
     profile: CandidateProfile
     document_analysis: DocumentAnalysisResponse
     processing_time_ms: float
+    resume_id: Optional[str] = None
+    indexed: bool = False
+    chunk_count: Optional[int] = None
 
+
+# RAG & Resume Intelligence Schemas
+class ResumeChunk(BaseModel):
+    chunk_id: str
+    resume_id: str
+    section: str
+    content: str
+    item_title: Optional[str] = None
+    page_number: Optional[int] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class CitationSource(BaseModel):
+    citation_id: int
+    section: str
+    item_title: Optional[str] = None
+    page_number: Optional[int] = None
+    snippet: str
+
+
+class ResumeQueryRequest(BaseModel):
+    resume_id: str
+    query: str = Field(..., min_length=2, max_length=500, description="Question about the resume")
+    top_k: int = Field(default=4, ge=1, le=10, description="Maximum number of evidence chunks to retrieve")
+    user_id: Optional[str] = Field(default=None, description="Optional user ID for tracking; not used for auth")
+
+
+class ResumeQueryResponse(BaseModel):
+    success: bool = True
+    answer: str
+    citations: List[CitationSource] = Field(default_factory=list)
+    has_sufficient_evidence: bool = True
+    resume_id: str
+    query: str
+    processing_time_ms: float
+
+
+class ResumeIndexStatusResponse(BaseModel):
+    resume_id: str
+    is_indexed: bool
+    chunk_count: int = 0
+    sections_indexed: List[str] = Field(default_factory=list)
+
+
+class ResumeDeleteResponse(BaseModel):
+    success: bool = True
+    message: str
+    resume_id: str
+
+
+# Authentication & User Management Schemas
+class UserRegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128, description="User password (8-128 chars)")
+    full_name: Optional[str] = Field(default=None, max_length=255, description="Candidate's full name")
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_not_blank(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Password cannot be blank or whitespace only")
+        return v
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower()
+
+
+class UserLoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower()
+
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    full_name: Optional[str] = None
+    is_active: bool = True
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: UserResponse
+
+
+# Job Intelligence & Career Gap Analysis Schemas
+class RequirementOutcome(str, Enum):
+    DIRECT_MATCH = "direct_match"
+    RECOGNIZED_ALIAS = "recognized_alias"
+    RELATED_SKILL = "related_skill"
+    NOT_FOUND_IN_RESUME = "not_found_in_resume"
+    DEMONSTRATED = "demonstrated"
+    PARTIALLY_DEMONSTRATED = "partially_demonstrated"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class ParsedJobDescription(BaseModel):
+    job_title: Optional[str] = Field(default=None, description="Extracted job title if identifiable")
+    company: Optional[str] = Field(default=None, description="Extracted company/employer name if identifiable")
+    required_skills: List[str] = Field(default_factory=list, description="Mandatory technical skills extracted from job description")
+    preferred_skills: List[str] = Field(default_factory=list, description="Preferred/nice-to-have technical skills")
+    required_qualifications: List[str] = Field(default_factory=list, description="Mandatory education and credential requirements")
+    preferred_qualifications: List[str] = Field(default_factory=list, description="Preferred education and credentials")
+    minimum_experience_years: Optional[float] = Field(default=None, description="Minimum years of experience required")
+    responsibilities: List[str] = Field(default_factory=list, description="Core job duties and responsibilities")
+    other_requirements: List[str] = Field(default_factory=list, description="Other explicit job requirements (e.g. location, clearance)")
+    raw_text: str = Field(..., description="Original job description text")
+    extraction_source: str = Field(default="deterministic", description="Extraction engine: deterministic or gemini")
+
+
+class RequirementMatch(BaseModel):
+    requirement: str
+    category: str = Field(..., description="Category: required_skills, preferred_skills, experience, education, other")
+    outcome: str = Field(..., description="demonstrated, partially_demonstrated, not_found_in_resume, not_applicable")
+    score: float = Field(..., ge=0.0, le=1.0, description="Normalized match score for this requirement")
+    resume_evidence: Optional[str] = Field(default=None, description="Direct quote or proof from candidate profile/resume")
+    source_section: Optional[str] = Field(default=None, description="Section where evidence was found (skills, experience, etc.)")
+    explanation: str = Field(..., description="Detailed explanation of the match or gap")
+
+
+class CategoryScore(BaseModel):
+    category: str
+    score: float = Field(..., ge=0.0, le=100.0, description="Raw percentage score for this category")
+    weight: float = Field(..., ge=0.0, le=1.0, description="Relative category weight (0.0 to 1.0)")
+    weighted_score: float = Field(..., ge=0.0, le=100.0, description="Category score scaled by normalized weight")
+    total_items: int = Field(default=0)
+    demonstrated_items: int = Field(default=0)
+    partially_demonstrated_items: int = Field(default=0)
+    missing_items: int = Field(default=0)
+    explanation: str = Field(default="")
+
+
+class CareerGapRecommendation(BaseModel):
+    requirement: str
+    gap_type: str = Field(..., description="'missing_evidence_in_resume' or 'skill_gap'")
+    evidence_gap: str = Field(..., description="Description of what is missing in candidate evidence")
+    suggested_action: str = Field(..., description="Actionable recommendation without fabricated claims or employment guarantees")
+    action_type: str = Field(default="learning_and_practice", description="learning_and_practice, resume_clarification, or project_building")
+
+
+class JobMatchRequest(BaseModel):
+    resume_id: str = Field(..., min_length=4, max_length=64, description="Resume identifier belonging to the authenticated user")
+    job_description: str = Field(..., min_length=20, max_length=50000, description="Job description text to evaluate")
+    job_title: Optional[str] = Field(default=None, max_length=255, description="Optional override/hint for job title")
+    company: Optional[str] = Field(default=None, max_length=255, description="Optional override/hint for company name")
+    user_id: Optional[str] = Field(default=None, description="Optional user ID for client tracking; not used for auth")
+
+    @field_validator("job_description")
+    @classmethod
+    def validate_job_description_not_blank(cls, v: str) -> str:
+        if not v or not v.strip() or len(v.strip()) < 20:
+            raise ValueError("Job description cannot be blank or shorter than 20 characters")
+        return v.strip()
+
+
+class JobMatchResponse(BaseModel):
+    success: bool = True
+    resume_id: str
+    job_title: Optional[str] = None
+    company: Optional[str] = None
+    overall_score: float = Field(..., ge=0.0, le=100.0, description="Overall match score (0-100)")
+    has_sufficient_evidence: bool = Field(default=True, description="False if resume or job description has insufficient extractable evidence")
+    category_scores: Dict[str, CategoryScore] = Field(default_factory=dict)
+    matched_requirements: List[RequirementMatch] = Field(default_factory=list)
+    partially_demonstrated_requirements: List[RequirementMatch] = Field(default_factory=list)
+    missing_requirements: List[RequirementMatch] = Field(default_factory=list)
+    critical_gaps: List[RequirementMatch] = Field(default_factory=list, description="Mandatory job requirements not demonstrated in resume")
+    contextual_evidence: List[RequirementMatch] = Field(default_factory=list, description="Related skills or background observed without awarding substitution credit")
+    uncertain_requirements: List[str] = Field(default_factory=list, description="Requirements or employment dates that could not be reliably verified from text")
+    recommendations: List[CareerGapRecommendation] = Field(default_factory=list)
+    scoring_explanation: str
+    limitations: List[str] = Field(default_factory=list)
+    parsed_job: Optional[ParsedJobDescription] = None

@@ -35,3 +35,13 @@ logs/
 
 # Windows
 Thumbs.db
+
+
+# Databases & Local Data
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.index
+
+*.faiss
